@@ -1,12 +1,22 @@
 library(devtools)
 
-chart <- httr::GET("https://api.iextrading.com/1.0/stock/aapl/chart/5y")
-chart_parsed <- jsonlite::fromJSON(httr::content(chart, "text"))
+tickers <- c("aapl")
+endpoints <- c("chart", "dividends")
 
-chart_parsed
+url_endpoint <- function(endpoint, ticker, time_window){
+  url <- paste0("https://api.iextrading.com/1.0/stock/", ticker, "/", endpoint, "/", time_window)
+}
 
-div <- httr::GET("https://api.iextrading.com/1.0/stock/aapl/dividends/5y")
-div_parsed <- jsonlite::fromJSON(httr::content(div, "text"))
 
-div_parsed
+df_iex_hist <- function(endpoint, ticker, time_window = "5y"){
+
+  resp <- httr::GET(url_endpoint(endpoint, ticker, time_window))
+  resp_parsed <- jsonlite::fromJSON(httr::content(resp, "text"))
+  return(data.frame(resp_parsed))
+
+}
+
+df_iex_hist(endpoints[1], tickers[1])
+df_iex_hist(endpoints[2], tickers[1])
+
 
