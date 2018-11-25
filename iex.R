@@ -1,6 +1,6 @@
 library(tidyverse)
 
-tickers <- c("aapl")
+tickers <- c("emb", "vug")
 endpoints <- c("chart", "dividends")
 
 url_endpoint <- function(endpoint, ticker, time_window){
@@ -9,6 +9,7 @@ url_endpoint <- function(endpoint, ticker, time_window){
 
 
 df_iex_hist <- function(endpoint, ticker, time_window = "5y"){
+  on.exit(Sys.sleep(0.2))
   resp <- httr::GET(url_endpoint(endpoint, ticker, time_window))
   resp_parsed <- jsonlite::fromJSON(httr::content(resp, "text"))
   return(data.frame(resp_parsed))
@@ -18,13 +19,20 @@ returns_divd_adjd <- function(df_chart, df_divd){
   df_divd %>%
     rename(date = exDate) %>%
     right_join(df_chart, by = "date") %>%
-    select(date, close, amount)
+    transmute(amount = replace_na(amount,0), date, close) %>%
+    mutate(returns = (close + amount)/lag(close) - 1) %>%
+    select(date, returns)
 }
 
-returns_divd_adjd(df_iex_hist(endpoints[1], tickers[1]), df_iex_hist(endpoints[2], tickers[1]))
+df_returns_all <- function(tickers){
+  lapply(tickers, function(ticker){
+    returns_divd_adjd(df_iex_hist(endpoints[1], ticker), df_iex_hist(endpoints[2], ticker)) %>%
+      mutate(ticker = ticker)
+  }) %>%
+  do.call(rbind, .)
+}
 
-str(df_iex_hist(endpoints[1], tickers[1]))
+df_returns_all(tickers)
 
-str(df_iex_hist(endpoints[2], tickers[1]))
 
 
