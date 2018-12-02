@@ -81,8 +81,9 @@ efficient_portfolio <- function(er, covmat, target_return = NULL){
   dvec <- rep.int(0, N)
   Amat <- cbind(rep(1,N), er, diag(1,N))
   bvec <- c(1, target_return, rep(0,N))
-  result <- quadprog::solve.QP(Dmat=Dmat,dvec=dvec,Amat=Amat,bvec=bvec,meq=2)
+  result <- quadprog::solve.QP(Dmat=Dmat,dvec=dvec,Amat=Amat,bvec=bvec,meq=1)
   w <- round(result$solution, 3)
+  names(w) <- names(er)
   return(w)
 }
 
@@ -90,7 +91,7 @@ w <- efficient_portfolio(er, covmat, mean(er))
 
 w
 crossprod(er, w)
-sqrt(w %*% covmat %*% w)
+w %*% covmat %*% w
 
 er
 covmat
