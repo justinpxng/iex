@@ -1,8 +1,9 @@
 library(tidyverse)
+library(quadprog)
 library(plm)
 library(meboot)
 
-tickers <- c("emb", "vug")
+tickers <- c("emb", "agg", "vxus", "vti")
 jboot <- 99
 
 url_endpoint <- function(endpoint, ticker, time_window){
@@ -20,6 +21,9 @@ df_iex_hist <- function(endpoint, ticker, time_window = "5y"){
 returns_divd_adjd <- function(iex_chart, iex_divd){
   iex_divd %>%
     rename(date = exDate) %>%
+    group_by(date) %>%
+    summarise(amount = min(amount)) %>%
+    ungroup() %>%
     right_join(iex_chart, by = "date") %>%
     transmute(amount = replace_na(amount,0), date, close)  %>%
     mutate(returns = (close + amount)/dplyr::lag(close) - 1) %>%
@@ -57,13 +61,39 @@ calc_mean_covariance_matrix <- function(df_panel){
   return(list(mean_returns = mean_returns, cov_returns = cov_returns))
 }
 
+
 df_long <- df_returns_all_tickers(tickers)
 df_returns_panel <- pdata.frame(df_long, index = c("ticker", "date"))
 
-calc_mean_covariance_matrix(df_returns_panel %>%
-  df_returns_complete_panel())
+mean_covariance <- df_returns_panel %>%
+  df_returns_complete_panel() %>%
+  calc_mean_covariance_matrix()
 
+er <- mean_covariance[[1]]
+covmat <- mean_covariance[[2]]
 
+efficient_portfolio <- function(er, covmat, target_return = NULL){
+  N <- length(er)
+  if (is.null(target_return)){
+    target_return <- min(er)
+  }
+  Dmat <- covmat
+  dvec <- rep.int(0, N)
+  Amat <- cbind(rep(1,N), er, diag(1,N))
+  bvec <- c(1, target_return, rep(0,N))
+  result <- quadprog::solve.QP(Dmat=Dmat,dvec=dvec,Amat=Amat,bvec=bvec,meq=2)
+  w <- round(result$solution, 3)
+  return(w)
+}
+
+w <- efficient_portfolio(er, covmat, mean(er))
+
+w
+crossprod(er, w)
+sqrt(w %*% covmat %*% w)
+
+er
+covmat
 
 #returns.ens <- meboot(x = df_panel, reps = jboot, colsubj = 3, coldata = 2)
 
