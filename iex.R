@@ -61,16 +61,12 @@ calc_mean_covariance_matrix <- function(df_panel){
   return(list(mean_returns = mean_returns, cov_returns = cov_returns))
 }
 
-
-df_long <- df_returns_all_tickers(tickers)
-df_returns_panel <- pdata.frame(df_long, index = c("ticker", "date"))
-
-mean_covariance <- df_returns_panel %>%
-  df_returns_complete_panel() %>%
-  calc_mean_covariance_matrix()
-
-er <- mean_covariance[[1]]
-covmat <- mean_covariance[[2]]
+reformat_resampled_returns <- function(returns.ens, i){
+  returns.ens %>%
+    select(i) %>%
+    bind_cols(df_returns_panel %>% select(-returns)) %>%
+    rename(returns = 1) 
+}  
 
 efficient_portfolio <- function(er, covmat, target_return = NULL){
   N <- length(er)
@@ -86,6 +82,35 @@ efficient_portfolio <- function(er, covmat, target_return = NULL){
   names(w) <- names(er)
   return(w)
 }
+
+
+df_long <- df_returns_all_tickers(tickers)
+df_returns_panel <- pdata.frame(df_long, index = c("ticker", "date"))
+returns.ens <- meboot(x = df_returns_panel, reps = jboot, colsubj = 3, coldata = 2)
+
+lapply(seq(returns.ens), function(i){
+  mean_covariance <- returns.ens %>%
+    reformat_resampled_returns(., i) %>%
+    df_returns_complete_panel(.) %>%
+    calc_mean_covariance_matrix(.)
+  er <- mean_covariance[[1]]
+  covmat <- mean_covariance[[2]]
+  w <- efficient_portfolio(er, covmat, mean(er))
+  return(w)
+}) %>%
+  Reduce('+', .)/jboot 
+
+
+q()
+
+mean_covariance <- df_returns_panel %>%
+  df_returns_complete_panel() %>%
+  calc_mean_covariance_matrix()
+
+er <- mean_covariance[[1]]
+covmat <- mean_covariance[[2]]
+
+
 
 w <- efficient_portfolio(er, covmat, mean(er))
 
