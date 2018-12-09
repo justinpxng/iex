@@ -11,7 +11,6 @@ ConstructUrlEndpoint <- function(endpoint, ticker, time.window){
   url <- paste0("https://api.iextrading.com/1.0/stock/", ticker, "/", endpoint, "/", time.window)
 }
 
-
 GetIexHist <- function(endpoint, ticker, time.window = "5y"){
   on.exit(Sys.sleep(0.2))
   resp <- httr::GET(ConstructUrlEndpoint(endpoint, ticker, time.window))
@@ -62,7 +61,7 @@ CalcMeanCovarianceMatrix <- function(df.panel){
   return(list(mean.returns = mean.returns, cov.returns = cov.returns))
 }
 
-ReformatResampledReturns <- function(returns.ens, i){
+ReformatResampledReturns <- function(returns.ens, df.returns.panel, i){
   returns.ens %>%
     select(i) %>%
     bind_cols(df.returns.panel %>% select(-returns)) %>%
@@ -106,57 +105,37 @@ ConvertAnnualToDailyTargetReturn <- function(annual.ret){
   return(daily.ret)
 }
 
-df.long <- GetMergeAllTickerReturns(tickers)
-df.returns.panel <- pdata.frame(df.long, index = c("ticker", "date"))
-returns.ens <- meboot(x = df.returns.panel, reps = jboot, colsubj = 3, coldata = 2)
+Main <- function(){
 
-w <- lapply(seq(returns.ens), function(i){
-  mean.covariance <- returns.ens %>%
-    ReformatResampledReturns(., i) %>%
-    CompleteCasesPanel(.) %>%
-    CalcMeanCovarianceMatrix(.)
-  er <- mean.covariance[[1]]
-  covmat <- mean.covariance[[2]]
-  w <- EfficientPortfolio(er, covmat, ConvertAnnualToDailyTargetReturn(target.return))
-  return(w)
-}) %>%
-  Reduce('+', .)/jboot 
+  df.long <- GetMergeAllTickerReturns(tickers)
+  df.returns.panel <- pdata.frame(df.long, index = c("ticker", "date"))
+  returns.ens <- meboot(x = df.returns.panel, reps = jboot, colsubj = 3, coldata = 2)
 
+  w <- lapply(seq(returns.ens), function(i){
+    mean.covariance <- returns.ens %>%
+      ReformatResampledReturns(., df.returns.panel, i) %>%
+      CompleteCasesPanel(.) %>%
+      CalcMeanCovarianceMatrix(.)
+    er <- mean.covariance[[1]]
+    covmat <- mean.covariance[[2]]
+    w <- EfficientPortfolio(er, covmat, ConvertAnnualToDailyTargetReturn(target.return))
+    return(w)
+  }) %>%
+    Reduce('+', .)/jboot 
 
-mean_covariance <- df.returns.panel %>%
-  CompleteCasesPanel() %>%
-  CalcMeanCovarianceMatrix()
-er <- mean_covariance[[1]]
-covmat <- mean_covariance[[2]]
-w
-crossprod(er, w)
-w %*% covmat %*% w %>% sqrt()
-covmat
-w %*% covmat %*% w
+  mean_covariance <- df.returns.panel %>%
+    CompleteCasesPanel() %>%
+    CalcMeanCovarianceMatrix()
+  er <- mean_covariance[[1]]
+  covmat <- mean_covariance[[2]]
+
+  print(w)
+  print(crossprod(er, w))
+  w %*% covmat %*% w %>% sqrt() %>% print()
+  covmat %>% print()
+  w %*% covmat %*% w %>% print()
+}
+
+Main()
 
 q()
-
-mean_covariance <- df_returns_panel %>%
-  df_returns_complete_panel() %>%
-  calc_mean_covariance_matrix()
-
-er <- mean_covariance[[1]]
-
-
-
-
-w <- efficient_portfolio(er, covmat, mean(er))
-
-w
-crossprod(er, w)
-w %*% covmat %*% w
-
-er
-covmat
-
-#returns.ens <- meboot(x = df_panel, reps = jboot, colsubj = 3, coldata = 2)
-
-#str(returns.ens)
-
-
-
