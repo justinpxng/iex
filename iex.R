@@ -105,10 +105,10 @@ ConvertAnnualToDailyTargetReturn <- function(annual.ret){
   return(daily.ret)
 }
 
-Main <- function(){
+Main <- function(tickers, jboot, target.return){
 
-  df.long <- GetMergeAllTickerReturns(tickers)
-  df.returns.panel <- pdata.frame(df.long, index = c("ticker", "date"))
+  df.returns.panel <- GetMergeAllTickerReturns(tickers) %>%
+      pdata.frame(., index = c("ticker", "date"))
   returns.ens <- meboot(x = df.returns.panel, reps = jboot, colsubj = 3, coldata = 2)
 
   w <- lapply(seq(returns.ens), function(i){
@@ -129,13 +129,13 @@ Main <- function(){
   er <- mean_covariance[[1]]
   covmat <- mean_covariance[[2]]
 
-  print(w)
-  print(crossprod(er, w))
+  w %>% print()
+  crossprod(er, w) %>% print()
   w %*% covmat %*% w %>% sqrt() %>% print()
   covmat %>% print()
   w %*% covmat %*% w %>% print()
 }
 
-Main()
+Main(tickers, jboot, target.return)
 
 q()
