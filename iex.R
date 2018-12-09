@@ -7,125 +7,125 @@ tickers <- c("emb", "agg", "vxus", "vti")
 target.return <- 0.14
 jboot <- 99
 
-url_endpoint <- function(endpoint, ticker, time_window){
-  url <- paste0("https://api.iextrading.com/1.0/stock/", ticker, "/", endpoint, "/", time_window)
+ConstructUrlEndpoint <- function(endpoint, ticker, time.window){
+  url <- paste0("https://api.iextrading.com/1.0/stock/", ticker, "/", endpoint, "/", time.window)
 }
 
 
-df_iex_hist <- function(endpoint, ticker, time_window = "5y"){
+GetIexHist <- function(endpoint, ticker, time.window = "5y"){
   on.exit(Sys.sleep(0.2))
-  resp <- httr::GET(url_endpoint(endpoint, ticker, time_window))
-  resp_parsed <- jsonlite::fromJSON(httr::content(resp, "text"))
-  return(data.frame(resp_parsed))
+  resp <- httr::GET(ConstructUrlEndpoint(endpoint, ticker, time.window))
+  resp.parsed <- jsonlite::fromJSON(httr::content(resp, "text"))
+  return(data.frame(resp.parsed))
 }
 
-returns_divd_adjd <- function(iex_chart, iex_divd){
-  iex_divd %>%
+CalcDividentAdjustedReturns <- function(iex.chart, iex.divd){
+  iex.divd %>%
     rename(date = exDate) %>%
     group_by(date) %>%
     summarise(amount = min(amount)) %>%
     ungroup() %>%
-    right_join(iex_chart, by = "date") %>%
-    transmute(amount = replace_na(amount,0), date, close)  %>%
+    right_join(iex.chart, by = "date") %>%
+    transmute(amount = replace_na(amount, 0), date, close)  %>%
     mutate(returns = (close + amount)/dplyr::lag(close) - 1) %>%
     select(date, returns)
 }
 
-df_returns_all_tickers <- function(tickers){
+GetMergeAllTickerReturns <- function(tickers){
   lapply(tickers, function(ticker){
-    returns_divd_adjd(iex_chart = df_iex_hist("chart", ticker),
-                      iex_divd = df_iex_hist("dividends", ticker)) %>%
+    CalcDividentAdjustedReturns(iex.chart = GetIexHist("chart", ticker),
+        iex.divd = GetIexHist("dividends", ticker)) %>%
       mutate(ticker = ticker)
   }) %>%
   do.call(rbind, .) %>%
   filter(complete.cases(.))
 }
 
-df_returns_complete_panel <- function(df_panel){
-  df_panel %>%
+CompleteCasesPanel <- function(df.panel){
+  df.panel %>%
     spread(ticker, returns) %>%
     filter(complete.cases(.)) %>%
     gather(ticker, returns, -date)
 }
 
-returns_flat_matrix <- function(df){
+FlattenReturnsDfMatrix <- function(df){
   df %>%
   spread(ticker, returns) %>%
   select(-date) %>%
   as.matrix(.)
 }
 
-calc_mean_covariance_matrix <- function(df_panel){
-  returns_matrix <- df_panel %>% returns_flat_matrix(.) 
-  mean_returns <- returns_matrix %>% apply(., 2, mean)
-  cov_returns <- ((nrow(returns_matrix)-1)^(-1)) * t(returns_matrix - mean_returns) %*% (returns_matrix - mean_returns)
-  return(list(mean_returns = mean_returns, cov_returns = cov_returns))
+CalcMeanCovarianceMatrix <- function(df.panel){
+  returns.matrix <- df.panel %>% FlattenReturnsDfMatrix(.) 
+  mean.returns <- returns.matrix %>% apply(., 2, mean)
+  cov.returns <- ((nrow(returns.matrix)-1)^(-1)) * t(returns.matrix - mean.returns) %*% (returns.matrix - mean.returns)
+  return(list(mean.returns = mean.returns, cov.returns = cov.returns))
 }
 
-reformat_resampled_returns <- function(returns.ens, i){
+ReformatResampledReturns <- function(returns.ens, i){
   returns.ens %>%
     select(i) %>%
-    bind_cols(df_returns_panel %>% select(-returns)) %>%
+    bind_cols(df.returns.panel %>% select(-returns)) %>%
     rename(returns = 1) 
 }  
 
-signif.floor <- function(x, n){
+SignifFloor <- function(x, n){
   pow <- floor( log10( abs(x) ) ) + 1 - n
   y <- floor(x / 10 ^ pow) * 10^pow
   y[x==0] <- 0
   y
 }
 
-efficient_portfolio <- function(er, covmat, target_return = NULL){
+EfficientPortfolio <- function(er, covmat, target.return = NULL){
   N <- length(er)
   if (max(er) >= 0){
-    if (is.null(target_return)){
-      target_return_bounded <- min(er)
+    if (is.null(target.return)){
+      target.return.bounded <- min(er)
     } else {
-      target_return_bounded <- min(max(min(er), target_return), max(er)) %>%
-        signif.floor(2)
+      target.return.bounded <- min(max(min(er), target.return), max(er)) %>%
+        SignifFloor(2)
 
     }
   } else if (max(er) < 0){
-    target_return_bounded <- max(er) %>%
-      signif.floor(2)
+    target.return.bounded <- max(er) %>%
+      SignifFloor(2)
 
   }
   Dmat <- covmat
   dvec <- rep.int(0, N)
   Amat <- cbind(rep(1,N), er, diag(1,N))
-  bvec <- c(1, target_return_bounded, rep(0,N))
+  bvec <- c(1, target.return.bounded, rep(0,N))
   result <- quadprog::solve.QP(Dmat=Dmat,dvec=dvec,Amat=Amat,bvec=bvec,meq=1)
   w <- round(result$solution, 3)
   names(w) <- names(er)
   return(w)
 }
 
-convert_annual_to_daily_target_return <- function(annual_ret){
-  daily_ret <- (1+annual_ret)^(1/252) - 1
-  return(daily_ret)
+ConvertAnnualToDailyTargetReturn <- function(annual.ret){
+  daily.ret <- (1+annual.ret)^(1/252) - 1
+  return(daily.ret)
 }
 
-df_long <- df_returns_all_tickers(tickers)
-df_returns_panel <- pdata.frame(df_long, index = c("ticker", "date"))
-returns.ens <- meboot(x = df_returns_panel, reps = jboot, colsubj = 3, coldata = 2)
+df.long <- GetMergeAllTickerReturns(tickers)
+df.returns.panel <- pdata.frame(df.long, index = c("ticker", "date"))
+returns.ens <- meboot(x = df.returns.panel, reps = jboot, colsubj = 3, coldata = 2)
 
 w <- lapply(seq(returns.ens), function(i){
-  mean_covariance <- returns.ens %>%
-    reformat_resampled_returns(., i) %>%
-    df_returns_complete_panel(.) %>%
-    calc_mean_covariance_matrix(.)
-  er <- mean_covariance[[1]]
-  covmat <- mean_covariance[[2]]
-  w <- efficient_portfolio(er, covmat, convert_annual_to_daily_target_return(target.return))
+  mean.covariance <- returns.ens %>%
+    ReformatResampledReturns(., i) %>%
+    CompleteCasesPanel(.) %>%
+    CalcMeanCovarianceMatrix(.)
+  er <- mean.covariance[[1]]
+  covmat <- mean.covariance[[2]]
+  w <- EfficientPortfolio(er, covmat, ConvertAnnualToDailyTargetReturn(target.return))
   return(w)
 }) %>%
   Reduce('+', .)/jboot 
 
 
-mean_covariance <- df_returns_panel %>%
-  df_returns_complete_panel() %>%
-    calc_mean_covariance_matrix()
+mean_covariance <- df.returns.panel %>%
+  CompleteCasesPanel() %>%
+  CalcMeanCovarianceMatrix()
 er <- mean_covariance[[1]]
 covmat <- mean_covariance[[2]]
 w
