@@ -1,11 +1,18 @@
+#!/usr/bin/env Rscript
+args = commandArgs(trailingOnly=TRUE)
+
 library(tidyverse)
 library(quadprog)
 library(plm)
 library(meboot)
 
-tickers <- c("emb", "agg", "vxus", "vti")
-target.return <- 0.14
-jboot <- 99
+if (length(args) == 0){
+  tickers <- c("emb", "agg", "vxus", "vti")
+} else {
+  tickers <- args
+}
+target.return <- 0.15
+jboot <- 999
 
 ConstructUrlEndpoint <- function(endpoint, ticker, time.window){
   url <- paste0("https://api.iextrading.com/1.0/stock/", ticker, "/", endpoint, "/", time.window)
