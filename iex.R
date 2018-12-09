@@ -4,6 +4,7 @@ library(plm)
 library(meboot)
 
 tickers <- c("emb", "agg", "vxus", "vti")
+target.return <- 0.14
 jboot <- 99
 
 url_endpoint <- function(endpoint, ticker, time_window){
@@ -68,38 +69,70 @@ reformat_resampled_returns <- function(returns.ens, i){
     rename(returns = 1) 
 }  
 
+signif.floor <- function(x, n){
+  pow <- floor( log10( abs(x) ) ) + 1 - n
+  y <- floor(x / 10 ^ pow) * 10^pow
+  y[x==0] <- 0
+  y
+}
+
 efficient_portfolio <- function(er, covmat, target_return = NULL){
   N <- length(er)
-  if (is.null(target_return)){
-    target_return <- min(er)
+  if (max(er) >= 0){
+    if (is.null(target_return)){
+      target_return_bounded <- min(er)
+    } else {
+      target_return_bounded <- min(max(min(er), target_return), max(er)) %>%
+        signif.floor(2)
+
+    }
+  } else if (max(er) < 0){
+    target_return_bounded <- max(er) %>%
+      signif.floor(2)
+
   }
   Dmat <- covmat
   dvec <- rep.int(0, N)
   Amat <- cbind(rep(1,N), er, diag(1,N))
-  bvec <- c(1, target_return, rep(0,N))
+  bvec <- c(1, target_return_bounded, rep(0,N))
   result <- quadprog::solve.QP(Dmat=Dmat,dvec=dvec,Amat=Amat,bvec=bvec,meq=1)
   w <- round(result$solution, 3)
   names(w) <- names(er)
   return(w)
 }
 
+convert_annual_to_daily_target_return <- function(annual_ret){
+  daily_ret <- (1+annual_ret)^(1/252) - 1
+  return(daily_ret)
+}
 
 df_long <- df_returns_all_tickers(tickers)
 df_returns_panel <- pdata.frame(df_long, index = c("ticker", "date"))
 returns.ens <- meboot(x = df_returns_panel, reps = jboot, colsubj = 3, coldata = 2)
 
-lapply(seq(returns.ens), function(i){
+w <- lapply(seq(returns.ens), function(i){
   mean_covariance <- returns.ens %>%
     reformat_resampled_returns(., i) %>%
     df_returns_complete_panel(.) %>%
     calc_mean_covariance_matrix(.)
   er <- mean_covariance[[1]]
   covmat <- mean_covariance[[2]]
-  w <- efficient_portfolio(er, covmat, mean(er))
+  w <- efficient_portfolio(er, covmat, convert_annual_to_daily_target_return(target.return))
   return(w)
 }) %>%
   Reduce('+', .)/jboot 
 
+
+mean_covariance <- df_returns_panel %>%
+  df_returns_complete_panel() %>%
+    calc_mean_covariance_matrix()
+er <- mean_covariance[[1]]
+covmat <- mean_covariance[[2]]
+w
+crossprod(er, w)
+w %*% covmat %*% w %>% sqrt()
+covmat
+w %*% covmat %*% w
 
 q()
 
@@ -108,7 +141,7 @@ mean_covariance <- df_returns_panel %>%
   calc_mean_covariance_matrix()
 
 er <- mean_covariance[[1]]
-covmat <- mean_covariance[[2]]
+
 
 
 
