@@ -12,7 +12,7 @@ if (length(args) == 0){
   tickers <- args
 }
 target.return <- 0.15
-jboot <- 999
+jboot <- 99
 
 ConstructUrlEndpoint <- function(endpoint, ticker, time.window){
   url <- paste0("https://api.iextrading.com/1.0/stock/", ticker, "/", endpoint, "/", time.window)
@@ -138,6 +138,7 @@ Main <- function(tickers, jboot, target.return){
 
   w %>% print()
   crossprod(er, w) %>% print()
+  (1 + crossprod(er, w))^(252) %>% print()  
   w %*% covmat %*% w %>% sqrt() %>% print()
   covmat %>% print()
   w %*% covmat %*% w %>% print()
