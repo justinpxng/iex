@@ -1,5 +1,6 @@
 #!/usr/bin/env Rscript
 args = commandArgs(trailingOnly=TRUE)
+options(scipen=99)
 
 library(tidyverse)
 library(quadprog)
@@ -11,8 +12,8 @@ if (length(args) == 0){
 } else {
   tickers <- args
 }
-target.return <- 0.15
-jboot <- 99
+target.return <- 0.10
+jboot <- 9999
 
 ConstructUrlEndpoint <- function(endpoint, ticker, time.window){
   url <- paste0("https://api.iextrading.com/1.0/stock/", ticker, "/", endpoint, "/", time.window)
@@ -90,12 +91,10 @@ EfficientPortfolio <- function(er, covmat, target.return = NULL){
     } else {
       target.return.bounded <- min(max(min(er), target.return), max(er)) %>%
         SignifFloor(2)
-
     }
   } else if (max(er) < 0){
     target.return.bounded <- max(er) %>%
       SignifFloor(2)
-
   }
   Dmat <- covmat
   dvec <- rep.int(0, N)
@@ -146,4 +145,3 @@ Main <- function(tickers, jboot, target.return){
 
 Main(tickers, jboot, target.return)
 
-q()
