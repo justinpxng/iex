@@ -13,7 +13,7 @@ if (length(args) == 0){
   tickers <- args
 }
 target.return <- 0.10
-jboot <- 9999
+jboot <- 99
 
 ConstructUrlEndpoint <- function(endpoint, ticker, time.window){
   url <- paste0("https://api.iextrading.com/1.0/stock/", ticker, "/", endpoint, "/", time.window)
@@ -118,6 +118,7 @@ Main <- function(tickers, jboot, target.return){
   returns.ens <- meboot(x = df.returns.panel, reps = jboot, colsubj = 3, coldata = 2)
 
   w <- lapply(seq(returns.ens), function(i){
+    cat("Proccessing sample: ", i, "\n")
     mean.covariance <- returns.ens %>%
       ReformatResampledReturns(., df.returns.panel, i) %>%
       CompleteCasesPanel(.) %>%
@@ -135,12 +136,24 @@ Main <- function(tickers, jboot, target.return){
   er <- mean_covariance[[1]]
   covmat <- mean_covariance[[2]]
 
+  # Print output
+  
+  "Efficient portfolio weights:\n" %>% cat()
   w %>% print()
-  crossprod(er, w) %>% print()
-  (1 + crossprod(er, w))^(252) %>% print()  
-  w %*% covmat %*% w %>% sqrt() %>% print()
+  cat("\n\n")
+  
+  crossprod(er, w) %>% sprintf("Efficient portfolio expected daily return: \n%f\n\n", .) %>% cat()
+  
+  (1 + crossprod(er, w))^(252) %>% sprintf("Efficient portfolio expected annual return: \n%f\n\n", .) %>% cat()
+  
+  w %*% covmat %*% w %>% sqrt() %>% sprintf("Efficient portfolio return standard deviation: \n%f\n\n", .) %>% cat()
+
+  "Asset covariance matrix:\n" %>% cat()
   covmat %>% print()
-  w %*% covmat %*% w %>% print()
+  cat("\n\n")
+
+  
+  w %*% covmat %*% w %>% sprintf("Efficient portfolio return variance: \n%f\n\n", .) %>% cat()
 }
 
 Main(tickers, jboot, target.return)
